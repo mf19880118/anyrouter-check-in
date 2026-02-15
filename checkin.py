@@ -544,12 +544,13 @@ async def try_checkin_with_auto_login(account: AccountConfig, account_name: str,
 		client.close()
 
 	# --- Second attempt: auto-login and retry ---
-	username = os.getenv('ANYROUTER_USERNAME', '').strip()
-	password = os.getenv('ANYROUTER_PASSWORD', '').strip()
+	# 优先使用账号自身配置的用户名密码，其次使用全局环境变量
+	username = (account.username or '').strip() or os.getenv('ANYROUTER_USERNAME', '').strip()
+	password = (account.password or '').strip() or os.getenv('ANYROUTER_PASSWORD', '').strip()
 
 	if not username or not password:
-		print(f'[FAILED] {account_name}: Session expired but ANYROUTER_USERNAME/ANYROUTER_PASSWORD not configured')
-		print(f'[INFO] {account_name}: To enable auto-login, set these environment variables in GitHub Secrets')
+		print(f'[FAILED] {account_name}: Session expired but username/password not configured')
+		print(f'[INFO] {account_name}: Add "username" and "password" fields to this account in ANYROUTER_ACCOUNTS, or set ANYROUTER_USERNAME/ANYROUTER_PASSWORD environment variables')
 		return False, user_info
 
 	print(f'[AUTO-LOGIN] {account_name}: Attempting automatic re-login...')

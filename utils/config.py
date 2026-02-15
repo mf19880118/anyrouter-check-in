@@ -139,6 +139,8 @@ class AccountConfig:
 	api_user: str
 	provider: str = 'anyrouter'
 	name: str | None = None
+	username: str | None = None
+	password: str | None = None
 
 	@classmethod
 	def from_dict(cls, data: dict, index: int) -> 'AccountConfig':
@@ -146,7 +148,14 @@ class AccountConfig:
 		provider = data.get('provider', 'anyrouter')
 		name = data.get('name', f'Account {index + 1}')
 
-		return cls(cookies=data['cookies'], api_user=data['api_user'], provider=provider, name=name if name else None)
+		return cls(
+			cookies=data['cookies'],
+			api_user=data['api_user'],
+			provider=provider,
+			name=name if name else None,
+			username=data.get('username'),
+			password=data.get('password'),
+		)
 
 	def get_display_name(self, index: int) -> str:
 		"""获取显示名称"""
