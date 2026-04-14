@@ -100,6 +100,14 @@ async def auto_login_and_get_credentials(account_name: str, provider_config, use
 
 			page = await context.new_page()
 
+			# Set up request interceptor to capture api_user from browser requests
+			captured_api_user = {}
+			def on_request(request):
+				header_val = request.headers.get('new-api-user')
+				if header_val and header_val != '-1' and 'api_user' not in captured_api_user:
+					captured_api_user['api_user'] = header_val
+			page.on('request', on_request)
+
 			try:
 				# Step 1: Navigate to login page and wait for WAF
 				print(f'[AUTO-LOGIN] {account_name}: Navigating to login page...')
@@ -286,31 +294,39 @@ async def auto_login_and_get_credentials(account_name: str, provider_config, use
 				print(f'[AUTO-LOGIN] {account_name}: Session cookie obtained: {session_value[:8]}...')
 				print(f'[AUTO-LOGIN] {account_name}: WAF cookies obtained: {list(waf_cookies.keys())}')
 
-				# Step 9: Get api_user (user ID) via API call
-				api_user = None
+				# Step 9: Get api_user (user ID) from intercepted browser requests
+				api_user = captured_api_user.get('api_user')
 				user_info_url = f'{provider_config.domain}{provider_config.user_info_path}'
 
-				try:
-					# Use the browser to make the API call (already authenticated)
-					api_response = await page.evaluate(f'''
-						async () => {{
-							const response = await fetch("{user_info_url}");
-							const data = await response.json();
-							return data;
-						}}
-					''')
+				if api_user:
+					print(f'[AUTO-LOGIN] {account_name}: API user ID captured from request headers: {api_user}')
 
-					if api_response and api_response.get('success'):
-						user_data = api_response.get('data', {})
-						api_user = str(user_data.get('id', ''))
-						if api_user:
-							print(f'[AUTO-LOGIN] {account_name}: API user ID obtained: {api_user}')
-						else:
-							print(f'[AUTO-LOGIN] {account_name}: User data found but no ID field')
-					else:
-						print(f'[AUTO-LOGIN] {account_name}: API response not successful: {api_response}')
-				except Exception as e:
-					print(f'[AUTO-LOGIN] {account_name}: Failed to get api_user via browser API: {e}')
+				if not api_user:
+					# Navigate to console/panel to trigger API requests that contain new-api-user header
+					try:
+						console_url = f'{provider_config.domain}/console'
+						print(f'[AUTO-LOGIN] {account_name}: Navigating to console to capture api_user...')
+						await page.goto(console_url, wait_until='networkidle', timeout=15000)
+						await page.wait_for_timeout(3000)
+						api_user = captured_api_user.get('api_user')
+					except Exception:
+						pass
+
+				if not api_user:
+					# Fallback: try fetch API via browser (with cookies already set)
+					try:
+						api_response = await page.evaluate(f'''
+							async () => {{
+								const response = await fetch("{user_info_url}");
+								const data = await response.json();
+								return data;
+							}}
+						''')
+						if api_response and api_response.get('success'):
+							user_data = api_response.get('data', {})
+							api_user = str(user_data.get('id', ''))
+					except Exception as e:
+						print(f'[AUTO-LOGIN] {account_name}: Fallback API fetch failed: {e}')
 
 				# If we couldn't get api_user from API, try extracting from cookie
 				if not api_user:
