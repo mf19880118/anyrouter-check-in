@@ -210,7 +210,21 @@ async def auto_login_and_get_credentials(account_name: str, provider_config, use
 					print(f'[AUTO-LOGIN] {account_name}: No login button found, pressing Enter...')
 					await page.press(password_selector, 'Enter')
 				else:
-					await page.click(login_button_selector)
+					# Try to dismiss any overlay/modal (e.g. semi-portal popups) that may block the button
+					try:
+						overlay = await page.query_selector('div.semi-portal')
+						if overlay:
+							print(f'[AUTO-LOGIN] {account_name}: Detected overlay, dismissing...')
+							await page.evaluate('document.querySelectorAll("div.semi-portal").forEach(e => e.remove())')
+							await page.wait_for_timeout(500)
+					except Exception:
+						pass
+					try:
+						await page.click(login_button_selector, timeout=5000)
+					except Exception:
+						# If click still blocked, fall back to pressing Enter
+						print(f'[AUTO-LOGIN] {account_name}: Button click blocked, using Enter key instead...')
+						await page.press(password_selector, 'Enter')
 
 				# Step 6: Wait for login to complete (page navigation or URL change)
 				print(f'[AUTO-LOGIN] {account_name}: Waiting for login response...')
